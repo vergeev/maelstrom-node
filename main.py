@@ -1,11 +1,22 @@
 import sys
-from typing import TypedDict, Literal, TextIO
+import json
+from dataclass import dataclass
+from typing import TypedDict, Literal, TextIO, Iterator
 
 
 type Json = dict[str, "Json"] | list["Json"] | str | int | float | bool | None
 
 
-class Message(TypedDict):
+class InvalidMessage(Exception):
+    """The message does not conform to the protocol"""
+
+
+class MessageHandlerMissing(Exception):
+    """No message handler for the provided type is registered"""
+
+
+@dataclass
+class Message:
     """Maelstrom message
 
     https://github.com/jepsen-io/maelstrom/blob/cb7f07239012d85d2c0595fd942ddb4613205905/doc/protocol.md#messages
@@ -14,6 +25,14 @@ class Message(TypedDict):
     src: str
     dest: str
     body: Json
+
+    def __post_init__(self):
+        if not self.src:
+            raise InvalidMessage("src cannot be None or empty")
+        if not self.dest:
+            raise InvalidMessage("dest cannot be None or empty")
+        if not body:
+            raise InvalidMessage("body cannot be None or empty")
 
 
 class InitMessage(TypedDict):
@@ -62,19 +81,38 @@ class Node:
         if err is None:
             self.err = sys.stderr
 
-    def init(self, m: InitMessage): ...
+    def init(self): ...
 
     def run(self):
-        for message in self.receive():
-            self.send(message)
+        for request in self.receive():
+            reply = self.process(request)
+            self.send(reply)
 
-    def receive(self) -> str:
-        yield from self.in_
+    def receive(self) -> Iterator[Message]:
+        for line in self.in_:
+            try:
+                parsed = json.loads(line)
+            except (JSONDecodeError, UnicodeDecodeError) as exc:
+                print(exc, file=self.err)
+                continue
+            try:
+                request = Message(parsed)
+            except InvalidMessage as exc:
+                print(exc, file=self.err)
+                continue
+            yield request
 
     def send(self, message: str) -> None:
         print(message, file=self.out)
 
-    def process_message(self, msg: Message): ...
+    def process(self, request: Message):
+        request_type = str(request.body.get("type", ""))
+        # case "echo":
+        #     ...
+        # case "init":
+        #     ...
+        # case _:
+        #     raise MessageHandlerMissing()
 
 
 if __name__ == "__main__":
