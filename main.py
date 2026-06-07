@@ -1,18 +1,20 @@
 import sys
 import json
-from dataclass import dataclass
-from typing import TypedDict, Literal, TextIO, Iterator
+from json import JSONDecodeError
+from dataclasses import dataclass
+from typing import TextIO, Iterator, Mapping, Sequence, Protocol
 
 
-type Json = dict[str, "Json"] | list["Json"] | str | int | float | bool | None
+type Json = Mapping[str, "Json"] | Sequence["Json"] | str | int | float | bool | None
+type MessageBody = Mapping[str, Json]
 
 
-class InvalidMessage(Exception):
-    """The message does not conform to the protocol"""
-
-
-class MessageHandlerMissing(Exception):
+class MessageHandlerMissingError(Exception):
     """No message handler for the provided type is registered"""
+
+
+class InvalidMessageError(Exception):
+    """The message does not conform to the protocol"""
 
 
 @dataclass
@@ -24,38 +26,31 @@ class Message:
 
     src: str
     dest: str
-    body: Json
+    body: MessageBody
 
     def __post_init__(self):
         if not self.src:
-            raise InvalidMessage("src cannot be None or empty")
+            raise InvalidMessageError("src cannot be null or empty")
         if not self.dest:
-            raise InvalidMessage("dest cannot be None or empty")
-        if not body:
-            raise InvalidMessage("body cannot be None or empty")
+            raise InvalidMessageError("dest cannot be null or empty")
+        if not self.body:
+            raise InvalidMessageError("body cannot be null or empty")
+        if not isinstance(self.body, Mapping):
+            raise InvalidMessageError("body has to be some type of mapping")
 
 
-class InitMessage(TypedDict):
-    """Initialization message to the node
+class MessageHandler(Protocol):
+    type: str
 
-    https://github.com/jepsen-io/maelstrom/blob/cb7f07239012d85d2c0595fd942ddb4613205905/resources/protocol-intro.md#initialization
-    """
-
-    type: Literal["init"]
-    msg_id: int
-    node_id: str
-    node_ids: list[str]
+    def __call__(self, message: Message) -> str:
+        """Handle a message with body of type returned by self.get_type"""
 
 
-def create_init_message(body: Json) -> InitMessage:
-    if body["type"] != "init":
-        raise ValueError("expected 'init' message type")
-    return InitMessage(
-        type="init",
-        msg_id=body["msg_id"],
-        node_id=body["node_id"],
-        node_ids=body["node_ids"],
-    )
+class EchoMessageHandler:
+    type = "echo"
+
+    def __call__(self, message: Message) -> str:
+        return f"PARSED: {message.src}|{message.dest}|{self.type}"
 
 
 class Node:
@@ -70,25 +65,40 @@ class Node:
 
     def __init__(
         self,
+        handlers: Sequence[MessageHandler],
         in_: TextIO | None = None,
         out: TextIO | None = None,
         err: TextIO | None = None,
     ):
         if in_ is None:
-            self.in_ = sys.stdin
+            in_ = sys.stdin
         if out is None:
-            self.out = sys.stdout
+            out = sys.stdout
         if err is None:
-            self.err = sys.stderr
-
-    def init(self): ...
+            err = sys.stderr
+        self.in_, self.out, self.err = in_, out, err
+        self.handlers: Mapping[str, MessageHandler] = {}
+        for handler in handlers:
+            self.handlers[handler.type] = handler
 
     def run(self):
         for request in self.receive():
-            reply = self.process(request)
-            self.send(reply)
+            try:
+                reply = self.process(request)
+            except MessageHandlerMissingError as exc:
+                print(exc, file=self.err)
+            else:
+                self.send(reply)
 
     def receive(self) -> Iterator[Message]:
+        """Get new message.
+
+        Together with send, responsible
+        for handling the representation logic of
+        the protocol: dealing with stdin and json,
+        so that other parts of the code do not have to
+        deal with them or know about them.
+        """
         for line in self.in_:
             try:
                 parsed = json.loads(line)
@@ -96,8 +106,8 @@ class Node:
                 print(exc, file=self.err)
                 continue
             try:
-                request = Message(parsed)
-            except InvalidMessage as exc:
+                request = Message(**parsed)
+            except (TypeError, InvalidMessageError) as exc:
                 print(exc, file=self.err)
                 continue
             yield request
@@ -105,16 +115,19 @@ class Node:
     def send(self, message: str) -> None:
         print(message, file=self.out)
 
-    def process(self, request: Message):
+    def process(self, request: Message) -> str:
+        """Process the request and generate the reply.
+
+        :raises: MessageHandlerMissingError when no handler is found
+                 for the message body type is passed
+        """
         request_type = str(request.body.get("type", ""))
-        # case "echo":
-        #     ...
-        # case "init":
-        #     ...
-        # case _:
-        #     raise MessageHandlerMissing()
+        handler = self.handlers.get(request_type)
+        if handler is None:
+            raise MessageHandlerMissingError("no handler for provided type")
+        return handler(request)
 
 
 if __name__ == "__main__":
-    node = Node()
+    node = Node(handlers=[EchoMessageHandler()])
     node.run()
