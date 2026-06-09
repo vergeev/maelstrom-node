@@ -9,4 +9,4 @@ format:
 run:
 	@uv run python main.py
 test:
-	@uv run pytest -q
+	@uv run python -m pytest -q
