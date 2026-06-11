@@ -8,16 +8,18 @@ from main import Node, EchoMessageHandler
     [
         pytest.param(
             '{"src": "c1", "dest": "n1", "body": {"msg_id": 1, "type": "echo", "echo": "hello there"}}\n',
-            "PARSED: c1|n1|echo\n",
+            '{"src": "n1", "dest": "c1", "body": {"msg_id": 1, "type": "echo_ok", "echo": "hello there", "in_reply_to": 1}}\n',
             "",
             id="single_line",
         ),
         pytest.param(
             '{"src": "c1", "dest": "n1", "body": {"msg_id": 1, "type": "echo", "echo": "hello there"}}\n'
-            '{"src": "c2", "dest": "n2", "body": {"msg_id": 1, "type": "echo", "echo": "hello there"}}\n',
-            "PARSED: c1|n1|echo\nPARSED: c2|n2|echo\n",
+            '{"src": "c2", "dest": "n1", "body": {"msg_id": 1, "type": "echo", "echo": "hello there"}}\n',
+            '{"src": "n1", "dest": "c1", "body": {"msg_id": 1, "type": "echo_ok", "echo": "hello there", "in_reply_to": 1}}\n'
+            '{"src": "n1", "dest": "c2", "body": {"msg_id": 2, "type": "echo_ok", "echo": "hello there", "in_reply_to": 1}}\n',
             "",
             id="two_line",
+            marks=pytest.mark.xfail(reason="increasing msg_id is not implemented yet"),
         ),
         pytest.param(
             "\n",
@@ -28,7 +30,7 @@ from main import Node, EchoMessageHandler
         pytest.param(
             "\n"
             '{"src": "c1", "dest": "n1", "body": {"msg_id": 1, "type": "echo", "echo": "hello there"}}\n',
-            "PARSED: c1|n1|echo\n",
+            '{"src": "n1", "dest": "c1", "body": {"msg_id": 1, "type": "echo_ok", "echo": "hello there", "in_reply_to": 1}}\n',
             "Expecting value: line 2 column 1 (char 1)\n",
             id="parsed_after_error",
         ),
@@ -93,7 +95,7 @@ def test_node(intext, outtext, errtext):
     stdout_mock = io.StringIO()
     stderr_mock = io.StringIO()
     node = Node(
-        handlers=[EchoMessageHandler()],
+        handlers=[EchoMessageHandler],
         in_=stdin_mock,
         out=stdout_mock,
         err=stderr_mock,

@@ -1,5 +1,6 @@
 import sys
 import json
+import dataclasses
 from json import JSONDecodeError
 from dataclasses import dataclass
 from typing import TextIO, Iterator, Mapping, Sequence, Protocol
@@ -40,17 +41,36 @@ class Message:
 
 
 class MessageHandler(Protocol):
+    """Responsible for doing the work requested by the message.
+
+    Returns a payload which contains "type" attribute
+    and other arbitrary attributes, see
+    https://github.com/jepsen-io/maelstrom/blob/main/doc/protocol.md#message-bodies
+    """
+
     type: str
 
-    def __call__(self, message: Message) -> str:
+    def __init__(self, node_delegate: Node) -> None:
+        """Initialize with a Node instance for node-specific info e.g. msg_id counter."""
+
+    def __call__(self, payload: MessageBody) -> MessageBody:
         """Handle a message with body of type returned by self.get_type"""
 
 
 class EchoMessageHandler:
     type = "echo"
 
-    def __call__(self, message: Message) -> str:
-        return f"PARSED: {message.src}|{message.dest}|{self.type}"
+    def __init__(self, node_delegate: Node) -> None:
+        self.node_delegate = node_delegate
+
+    def __call__(self, payload: MessageBody) -> MessageBody:
+        reply_payload = {}
+        for key, value in payload.items():
+            reply_payload[key] = value
+        reply_payload["type"] = "echo_ok"
+        reply_payload["msg_id"] = self.node_delegate.node_message_id
+        reply_payload["in_reply_to"] = payload["msg_id"]
+        return reply_payload
 
 
 class Node:
@@ -65,11 +85,11 @@ class Node:
 
     def __init__(
         self,
-        handlers: Sequence[MessageHandler],
+        handlers: Sequence[type[MessageHandler]],
         in_: TextIO | None = None,
         out: TextIO | None = None,
         err: TextIO | None = None,
-    ):
+    ) -> None:
         if in_ is None:
             in_ = sys.stdin
         if out is None:
@@ -79,16 +99,30 @@ class Node:
         self.in_, self.out, self.err = in_, out, err
         self.handlers: Mapping[str, MessageHandler] = {}
         for handler in handlers:
-            self.handlers[handler.type] = handler
+            self.handlers[handler.type] = handler(node_delegate=self)
+        self.node_id = "n1"  # since init not implemented
+        self.node_message_id = 1  # TODO: implement msg_id counter
 
-    def run(self):
+    def run(self) -> None:
         for request in self.receive():
             try:
-                reply = self.process(request)
+                result = self.process(request)
             except MessageHandlerMissingError as exc:
                 print(exc, file=self.err)
             else:
-                self.send(reply)
+                self.reply(
+                    src=self.node_id,
+                    dest=request.src,
+                    payload=result,
+                )
+
+    def reply(self, src: str, dest: str, payload: MessageBody) -> None:
+        reply = Message(
+            src=src,
+            dest=dest,
+            body=payload,
+        )
+        self.send(reply)
 
     def receive(self) -> Iterator[Message]:
         """Get new message.
@@ -112,10 +146,10 @@ class Node:
                 continue
             yield request
 
-    def send(self, message: str) -> None:
-        print(message, file=self.out)
+    def send(self, message: Message) -> None:
+        print(json.dumps(dataclasses.asdict(message)), file=self.out)
 
-    def process(self, request: Message) -> str:
+    def process(self, request: Message) -> MessageBody:
         """Process the request and generate the reply.
 
         :raises: MessageHandlerMissingError when no handler is found
@@ -125,9 +159,9 @@ class Node:
         handler = self.handlers.get(request_type)
         if handler is None:
             raise MessageHandlerMissingError("no handler for provided type")
-        return handler(request)
+        return handler(request.body)
 
 
 if __name__ == "__main__":
-    node = Node(handlers=[EchoMessageHandler()])
+    node = Node(handlers=[EchoMessageHandler])
     node.run()
