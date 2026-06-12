@@ -88,6 +88,12 @@ from main import Node, EchoMessageHandler
             "no handler for provided type\n",
             id="body_type_empty",
         ),
+        pytest.param(
+            '{"src": "c1", "dest": "n1", "body": {"type": 1}}\n',
+            "",
+            "type has to be a string\n",
+            id="body_type_non_string",
+        ),
     ],
 )
 def test_node(intext, outtext, errtext):

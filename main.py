@@ -107,7 +107,7 @@ class Node:
         for request in self.receive():
             try:
                 result = self.process(request)
-            except MessageHandlerMissingError as exc:
+            except (TypeError, MessageHandlerMissingError) as exc:
                 print(exc, file=self.err)
             else:
                 self.reply(
@@ -155,7 +155,9 @@ class Node:
         :raises: MessageHandlerMissingError when no handler is found
                  for the message body type is passed
         """
-        request_type = str(request.body.get("type", ""))
+        request_type = request.body.get("type")
+        if not isinstance(request_type, str):
+            raise TypeError("type has to be a string")
         handler = self.handlers.get(request_type)
         if handler is None:
             raise MessageHandlerMissingError("no handler for provided type")
