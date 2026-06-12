@@ -1,7 +1,7 @@
 import io
 import pytest
 from typing import Sequence
-from maelstrom_node.main import (
+from main import (
     Node,
     EchoMessageHandler,
     MessageHandler,
