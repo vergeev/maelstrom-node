@@ -1,7 +1,12 @@
 import io
 import pytest
 from typing import Sequence
-from maelstrom_node.main import Node, EchoMessageHandler, MessageHandler
+from maelstrom_node.main import (
+    Node,
+    EchoMessageHandler,
+    MessageHandler,
+    InitMessageHandler,
+)
 
 
 @pytest.mark.parametrize(
@@ -117,6 +122,14 @@ from maelstrom_node.main import Node, EchoMessageHandler, MessageHandler
             "Expecting value: line 2 column 1 (char 1)\n",
             [EchoMessageHandler],
             id="parsed_after_error_echo_handler_test",
+        ),
+        # InitMessageHandler tests
+        pytest.param(
+            '{"src": "maelstrom", "dest": "*", "body": {"type": "init", "msg_id": 1, "node_id": "n3", "node_ids": ["n1", "n2", "n3"]}}\n',
+            '{"src": "n3", "dest": "maelstrom", "body": {"type": "init_ok", "in_reply_to": 1}}\n',
+            "",
+            [InitMessageHandler],
+            id="init_ok",
         ),
     ],
 )

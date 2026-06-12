@@ -73,6 +73,29 @@ class EchoMessageHandler:
         return reply_payload
 
 
+class InitMessageHandler:
+    type = "init"
+
+    def __init__(self, node_delegate: Node) -> None:
+        self.node_delegate = node_delegate
+
+    def __call__(self, payload: MessageBody) -> MessageBody:
+        node_id = payload.get("node_id")
+        if isinstance(node_id, str):
+            self.node_delegate.node_id = node_id
+        else:
+            raise TypeError("node_id must be present and be a string")
+        node_ids = payload.get("node_ids")
+        if isinstance(node_ids, list):
+            self.node_delegate.node_neighbor_ids = node_ids
+        else:
+            raise TypeError("node_ids must be present and be a list of strings")
+        return {
+            "type": "init_ok",
+            "in_reply_to": payload["msg_id"],
+        }
+
+
 class Node:
     """Maelstrom node
 
@@ -82,6 +105,9 @@ class Node:
 
     https://github.com/jepsen-io/maelstrom/blob/cb7f07239012d85d2c0595fd942ddb4613205905/doc/protocol.md#nodes-and-networks
     """
+
+    node_id: str
+    node_neighbor_ids: Sequence[str]
 
     def __init__(
         self,
@@ -100,7 +126,8 @@ class Node:
         self.handlers: Mapping[str, MessageHandler] = {}
         for handler in handlers:
             self.handlers[handler.type] = handler(node_delegate=self)
-        self.node_id = "n1"  # TODO: since init not implemented
+        self.node_id = "n1"
+        self.node_neighbor_ids = []
         self._node_message_id = 0
 
     @property
@@ -170,5 +197,5 @@ class Node:
 
 
 if __name__ == "__main__":
-    node = Node(handlers=[EchoMessageHandler])
+    node = Node(handlers=[EchoMessageHandler, InitMessageHandler])
     node.run()
