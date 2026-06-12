@@ -19,7 +19,6 @@ from main import Node, EchoMessageHandler
             '{"src": "n1", "dest": "c2", "body": {"msg_id": 2, "type": "echo_ok", "echo": "hello there", "in_reply_to": 1}}\n',
             "",
             id="two_line",
-            marks=pytest.mark.xfail(reason="increasing msg_id is not implemented yet"),
         ),
         pytest.param(
             "\n",

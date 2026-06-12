@@ -100,8 +100,13 @@ class Node:
         self.handlers: Mapping[str, MessageHandler] = {}
         for handler in handlers:
             self.handlers[handler.type] = handler(node_delegate=self)
-        self.node_id = "n1"  # since init not implemented
-        self.node_message_id = 1  # TODO: implement msg_id counter
+        self.node_id = "n1"  # TODO: since init not implemented
+        self._node_message_id = 0
+
+    @property
+    def node_message_id(self) -> int:
+        self._node_message_id += 1
+        return self._node_message_id
 
     def run(self) -> None:
         for request in self.receive():
