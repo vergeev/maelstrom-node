@@ -7,31 +7,17 @@ from maelstrom_node.main import Node, EchoMessageHandler
     "intext, outtext, errtext",
     [
         pytest.param(
-            '{"src": "c1", "dest": "n1", "body": {"msg_id": 1, "type": "echo", "echo": "hello there"}}\n',
-            '{"src": "n1", "dest": "c1", "body": {"msg_id": 1, "type": "echo_ok", "echo": "hello there", "in_reply_to": 1}}\n',
-            "",
-            id="single_line",
-        ),
-        pytest.param(
-            '{"src": "c1", "dest": "n1", "body": {"msg_id": 1, "type": "echo", "echo": "hello there"}}\n'
-            '{"src": "c2", "dest": "n1", "body": {"msg_id": 1, "type": "echo", "echo": "hello there"}}\n',
-            '{"src": "n1", "dest": "c1", "body": {"msg_id": 1, "type": "echo_ok", "echo": "hello there", "in_reply_to": 1}}\n'
-            '{"src": "n1", "dest": "c2", "body": {"msg_id": 2, "type": "echo_ok", "echo": "hello there", "in_reply_to": 1}}\n',
-            "",
-            id="two_line",
-        ),
-        pytest.param(
             "\n",
             "",
             "Expecting value: line 2 column 1 (char 1)\n",
             id="empty_line",
         ),
         pytest.param(
-            "\n"
-            '{"src": "c1", "dest": "n1", "body": {"msg_id": 1, "type": "echo", "echo": "hello there"}}\n',
-            '{"src": "n1", "dest": "c1", "body": {"msg_id": 1, "type": "echo_ok", "echo": "hello there", "in_reply_to": 1}}\n',
+            "\n\n",
+            "",
+            "Expecting value: line 2 column 1 (char 1)\n"
             "Expecting value: line 2 column 1 (char 1)\n",
-            id="parsed_after_error",
+            id="processes_messages_after_error",
         ),
         pytest.param(
             "{}\n",
@@ -96,6 +82,49 @@ from maelstrom_node.main import Node, EchoMessageHandler
     ],
 )
 def test_node(intext: str, outtext: str, errtext: str) -> None:
+    stdin_mock = io.StringIO(intext)
+    stdout_mock = io.StringIO()
+    stderr_mock = io.StringIO()
+    node = Node(
+        handlers=[],
+        in_=stdin_mock,
+        out=stdout_mock,
+        err=stderr_mock,
+    )
+
+    node.run()
+
+    assert stdout_mock.getvalue() == outtext
+    assert stderr_mock.getvalue() == errtext
+
+
+@pytest.mark.parametrize(
+    "intext, outtext, errtext",
+    [
+        pytest.param(
+            '{"src": "c1", "dest": "n1", "body": {"msg_id": 1, "type": "echo", "echo": "hello there"}}\n',
+            '{"src": "n1", "dest": "c1", "body": {"msg_id": 1, "type": "echo_ok", "echo": "hello there", "in_reply_to": 1}}\n',
+            "",
+            id="single_line",
+        ),
+        pytest.param(
+            '{"src": "c1", "dest": "n1", "body": {"msg_id": 1, "type": "echo", "echo": "hello there"}}\n'
+            '{"src": "c2", "dest": "n1", "body": {"msg_id": 1, "type": "echo", "echo": "hello there"}}\n',
+            '{"src": "n1", "dest": "c1", "body": {"msg_id": 1, "type": "echo_ok", "echo": "hello there", "in_reply_to": 1}}\n'
+            '{"src": "n1", "dest": "c2", "body": {"msg_id": 2, "type": "echo_ok", "echo": "hello there", "in_reply_to": 1}}\n',
+            "",
+            id="two_line",
+        ),
+        pytest.param(
+            "\n"
+            '{"src": "c1", "dest": "n1", "body": {"msg_id": 1, "type": "echo", "echo": "hello there"}}\n',
+            '{"src": "n1", "dest": "c1", "body": {"msg_id": 1, "type": "echo_ok", "echo": "hello there", "in_reply_to": 1}}\n',
+            "Expecting value: line 2 column 1 (char 1)\n",
+            id="parsed_after_error",
+        ),
+    ],
+)
+def test_echo_message_handler(intext: str, outtext: str, errtext: str) -> None:
     stdin_mock = io.StringIO(intext)
     stdout_mock = io.StringIO()
     stderr_mock = io.StringIO()
