@@ -1,6 +1,6 @@
 import io
 import pytest
-from main import Node, EchoMessageHandler
+from maelstrom_node.main import Node, EchoMessageHandler
 
 
 @pytest.mark.parametrize(
