@@ -96,7 +96,7 @@ from main import Node, EchoMessageHandler
         ),
     ],
 )
-def test_node(intext, outtext, errtext):
+def test_node(intext: str, outtext: str, errtext: str) -> None:
     stdin_mock = io.StringIO(intext)
     stdout_mock = io.StringIO()
     stderr_mock = io.StringIO()

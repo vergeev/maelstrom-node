@@ -11,3 +11,6 @@ dev = [
     "ruff>=0.15.17",
     "pyrefly>=0.60.0",
 ]
+
+[tool.mypy]
+strict = true

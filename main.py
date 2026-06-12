@@ -29,7 +29,7 @@ class Message:
     dest: str
     body: MessageBody
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.src:
             raise InvalidMessageError("src cannot be null or empty")
         if not self.dest:
