@@ -49,9 +49,10 @@ class MessageHandler(Protocol):
     """
 
     type: str
+    reply_type: str
 
     def __init__(self, node_delegate: Node) -> None:
-        """Initialize with a Node instance for node-specific info e.g. msg_id counter."""
+        """Initialize with a Node instance for interacting with the node state."""
 
     def __call__(self, payload: MessageBody) -> MessageBody:
         """Handle a message with body of type returned by self.get_type"""
@@ -59,6 +60,7 @@ class MessageHandler(Protocol):
 
 class EchoMessageHandler:
     type = "echo"
+    reply_type = "echo_ok"
 
     def __init__(self, node_delegate: Node) -> None:
         self.node_delegate = node_delegate
@@ -67,14 +69,12 @@ class EchoMessageHandler:
         reply_payload = {}
         for key, value in payload.items():
             reply_payload[key] = value
-        reply_payload["type"] = "echo_ok"
-        reply_payload["msg_id"] = self.node_delegate.node_message_id
-        reply_payload["in_reply_to"] = payload["msg_id"]
         return reply_payload
 
 
 class InitMessageHandler:
     type = "init"
+    reply_type = "init_ok"
 
     def __init__(self, node_delegate: Node) -> None:
         self.node_delegate = node_delegate
@@ -90,11 +90,7 @@ class InitMessageHandler:
             self.node_delegate.node_neighbor_ids = node_ids
         else:
             raise TypeError("node_ids must be present and be a list of strings")
-        return {
-            "type": "init_ok",
-            "in_reply_to": payload["msg_id"],
-            "msg_id": self.node_delegate.node_message_id,
-        }
+        return {}
 
 
 class Node:
@@ -143,19 +139,27 @@ class Node:
             except (TypeError, MessageHandlerMissingError) as exc:
                 print(exc, file=self.err)
             else:
-                self.reply(
-                    src=self.node_id,
-                    dest=request.src,
-                    payload=result,
-                )
+                self.reply(request, result)
 
-    def reply(self, src: str, dest: str, payload: MessageBody) -> None:
-        reply = Message(
-            src=src,
+    def reply(self, request: Message, result_payload: MessageBody) -> None:
+        reply_payload = dict(**result_payload)
+        handler = self.choose_request_handler(request)
+        reply_payload["type"] = handler.reply_type
+        reply_payload["msg_id"] = self.node_message_id
+        if "msg_id" in request.body:
+            reply_payload["in_reply_to"] = request.body["msg_id"]
+        self.send(
+            dest=request.src,
+            payload=reply_payload,
+        )
+
+    def send(self, dest: str, payload: MessageBody) -> None:
+        message = Message(
+            src=self.node_id,
             dest=dest,
             body=payload,
         )
-        self.send(reply)
+        print(json.dumps(dataclasses.asdict(message)), file=self.out)
 
     def receive(self) -> Iterator[Message]:
         """Get new message.
@@ -179,22 +183,23 @@ class Node:
                 continue
             yield request
 
-    def send(self, message: Message) -> None:
-        print(json.dumps(dataclasses.asdict(message)), file=self.out)
-
     def process(self, request: Message) -> MessageBody:
         """Process the request and generate the reply.
 
         :raises: MessageHandlerMissingError when no handler is found
                  for the message body type is passed
         """
+        handler = self.choose_request_handler(request)
+        return handler(request.body)
+
+    def choose_request_handler(self, request: Message) -> MessageHandler:
         request_type = request.body.get("type")
         if not isinstance(request_type, str):
             raise TypeError("type has to be a string")
         handler = self.handlers.get(request_type)
         if handler is None:
             raise MessageHandlerMissingError("no handler for provided type")
-        return handler(request.body)
+        return handler
 
 
 if __name__ == "__main__":

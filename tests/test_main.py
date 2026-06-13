@@ -126,7 +126,7 @@ from main import (
         # InitMessageHandler tests
         pytest.param(
             '{"src": "c0", "dest": "n3", "body": {"type": "init", "msg_id": 1, "node_id": "n3", "node_ids": ["n1", "n2", "n3"]}}\n',
-            '{"src": "n3", "dest": "c0", "body": {"type": "init_ok", "in_reply_to": 1, "msg_id": 0}}\n',
+            '{"src": "n3", "dest": "c0", "body": {"type": "init_ok", "msg_id": 0, "in_reply_to": 1}}\n',
             "",
             [InitMessageHandler],
             id="init_ok",
