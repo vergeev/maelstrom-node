@@ -101,16 +101,16 @@ from main import (
         # EchoMessageHandler tests
         pytest.param(
             '{"src": "c1", "dest": "n1", "body": {"msg_id": 1, "type": "echo", "echo": "hello there"}}\n',
-            '{"src": "n1", "dest": "c1", "body": {"msg_id": 1, "type": "echo_ok", "echo": "hello there", "in_reply_to": 1}}\n',
+            '{"src": "n1", "dest": "c1", "body": {"msg_id": 0, "type": "echo_ok", "echo": "hello there", "in_reply_to": 1}}\n',
             "",
             [EchoMessageHandler],
             id="single_line_echo_handler_test",
         ),
         pytest.param(
-            '{"src": "c1", "dest": "n1", "body": {"msg_id": 1, "type": "echo", "echo": "hello there"}}\n'
-            '{"src": "c2", "dest": "n1", "body": {"msg_id": 1, "type": "echo", "echo": "hello there"}}\n',
-            '{"src": "n1", "dest": "c1", "body": {"msg_id": 1, "type": "echo_ok", "echo": "hello there", "in_reply_to": 1}}\n'
-            '{"src": "n1", "dest": "c2", "body": {"msg_id": 2, "type": "echo_ok", "echo": "hello there", "in_reply_to": 1}}\n',
+            '{"src": "c1", "dest": "n1", "body": {"msg_id": 2, "type": "echo", "echo": "hello there"}}\n'
+            '{"src": "c2", "dest": "n1", "body": {"msg_id": 3, "type": "echo", "echo": "hello there"}}\n',
+            '{"src": "n1", "dest": "c1", "body": {"msg_id": 0, "type": "echo_ok", "echo": "hello there", "in_reply_to": 2}}\n'
+            '{"src": "n1", "dest": "c2", "body": {"msg_id": 1, "type": "echo_ok", "echo": "hello there", "in_reply_to": 3}}\n',
             "",
             [EchoMessageHandler],
             id="two_line_echo_handler_test",
@@ -118,15 +118,15 @@ from main import (
         pytest.param(
             "\n"
             '{"src": "c1", "dest": "n1", "body": {"msg_id": 1, "type": "echo", "echo": "hello there"}}\n',
-            '{"src": "n1", "dest": "c1", "body": {"msg_id": 1, "type": "echo_ok", "echo": "hello there", "in_reply_to": 1}}\n',
+            '{"src": "n1", "dest": "c1", "body": {"msg_id": 0, "type": "echo_ok", "echo": "hello there", "in_reply_to": 1}}\n',
             "Expecting value: line 2 column 1 (char 1)\n",
             [EchoMessageHandler],
             id="parsed_after_error_echo_handler_test",
         ),
         # InitMessageHandler tests
         pytest.param(
-            '{"src": "maelstrom", "dest": "*", "body": {"type": "init", "msg_id": 1, "node_id": "n3", "node_ids": ["n1", "n2", "n3"]}}\n',
-            '{"src": "n3", "dest": "maelstrom", "body": {"type": "init_ok", "in_reply_to": 1}}\n',
+            '{"src": "c0", "dest": "n3", "body": {"type": "init", "msg_id": 1, "node_id": "n3", "node_ids": ["n1", "n2", "n3"]}}\n',
+            '{"src": "n3", "dest": "c0", "body": {"type": "init_ok", "in_reply_to": 1, "msg_id": 0}}\n',
             "",
             [InitMessageHandler],
             id="init_ok",

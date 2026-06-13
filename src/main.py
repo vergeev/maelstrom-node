@@ -93,6 +93,7 @@ class InitMessageHandler:
         return {
             "type": "init_ok",
             "in_reply_to": payload["msg_id"],
+            "msg_id": self.node_delegate.node_message_id,
         }
 
 
@@ -128,7 +129,7 @@ class Node:
             self.handlers[handler.type] = handler(node_delegate=self)
         self.node_id = "n1"
         self.node_neighbor_ids = []
-        self._node_message_id = 0
+        self._node_message_id = -1
 
     @property
     def node_message_id(self) -> int:
