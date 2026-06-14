@@ -131,6 +131,16 @@ from main import (
             [InitMessageHandler],
             id="init_ok",
         ),
+        # InitMessageHandler and EchoMessageHandler together
+        pytest.param(
+            '{"src":"c0","dest":"n1","body":{"type":"init","msg_id":1,"node_id":"n1","node_ids":["n1"]}}\n'
+            '{"src":"c1","dest":"n1","body":{"type":"echo","msg_id":2,"echo":"hello"}}\n',
+            '{"src": "n1", "dest": "c0", "body": {"type": "init_ok", "msg_id": 0, "in_reply_to": 1}}\n'
+            '{"src": "n1", "dest": "c1", "body": {"type": "echo_ok", "msg_id": 1, "echo": "hello", "in_reply_to": 2}}\n',
+            "",
+            [InitMessageHandler, EchoMessageHandler],
+            id="init_ok_echo_ok",
+        ),
     ],
 )
 def test_node(
