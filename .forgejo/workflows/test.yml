@@ -23,7 +23,7 @@ jobs:
         run: uv sync --locked --all-extras --dev
 
       - name: Mypy
-        run: uv run ruff check
+        run: uv run mypy .
 
       - name: Ruff check
         run: uv run ruff check
