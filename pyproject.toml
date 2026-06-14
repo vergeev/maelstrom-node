@@ -12,9 +12,12 @@ dev = [
     "pyrefly>=0.60.0",
 ]
 
+[tool.pytest.ini_options]
+pythonpath = "src"
+
 [tool.mypy]
 strict = true
 
-[tool.pytest.ini_options]
-pythonpath = "src"
+[tool.pyrefly]
+preset = "strict"
 

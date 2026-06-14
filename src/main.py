@@ -87,6 +87,8 @@ class InitMessageHandler:
             raise TypeError("node_id must be present and be a string")
         node_ids = payload.get("node_ids")
         if isinstance(node_ids, list):
+            # until we define input/output schema for MessageHandler,
+            # pyrefly: ignore [bad-assignment]
             self.node_delegate.node_neighbor_ids = node_ids
         else:
             raise TypeError("node_ids must be present and be a list of strings")
