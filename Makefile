@@ -12,6 +12,6 @@ check:
 format:
 	@uv run ruff format -q --output-format concise
 run:
-	@uv run python main.py
+	@uv run python -m src.main
 test:
 	@uv run python -m pytest -q
