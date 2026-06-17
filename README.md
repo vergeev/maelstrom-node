@@ -11,6 +11,14 @@ Running:
 make run
 ```
 
+## Remotes
+
+This repo uses both Codeberg and Github as its remotes.
+
+Reasons:
+* [Github](https://github.com/vergeev/maelstrom-node): community, free CI.
+* [Codeberg](https://codeberg.org/pavel-vergeev/maelstrom-node): [mission](https://docs.codeberg.org/getting-started/what-is-codeberg/), infra duplication. For CI, I use [locally deployed forgejo runner](https://codeberg.org/pavel-vergeev/local-forgejo-actions-runner-compose).
+
 ## Typing
 
 The project uses both mypy and pyrefly to do its type checking.
