@@ -131,6 +131,13 @@ from main import (
             [InitMessageHandler],
             id="init_ok",
         ),
+        pytest.param(
+            '{"src": "c0", "dest": "n3", "body": {"type": "init", "node_id": "n3", "node_ids": ["n1", "n2", "n3"]}}\n',
+            "",
+            "no msg_id in a request that requires a response\n",
+            [InitMessageHandler],
+            id="init_no_msg_id",
+        ),
         # InitMessageHandler and EchoMessageHandler together
         pytest.param(
             '{"src":"c0","dest":"n1","body":{"type":"init","msg_id":1,"node_id":"n1","node_ids":["n1"]}}\n'

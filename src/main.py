@@ -1,3 +1,4 @@
+from typing import runtime_checkable
 import sys
 import json
 import dataclasses
@@ -40,6 +41,7 @@ class Message:
             raise InvalidMessageError("body has to be some type of mapping")
 
 
+@runtime_checkable
 class MessageHandler(Protocol):
     """Responsible for doing the work requested by the message.
 
@@ -49,13 +51,17 @@ class MessageHandler(Protocol):
     """
 
     type: str
-    reply_type: str
 
     def __init__(self, node_delegate: Node) -> None:
         """Initialize with a Node instance for interacting with the node state."""
 
     def __call__(self, payload: MessageBody) -> MessageBody:
         """Handle a message with body of type returned by self.get_type"""
+
+
+@runtime_checkable
+class ResponseRequiredMessageHandler(MessageHandler, Protocol):
+    reply_type: str
 
 
 class EchoMessageHandler:
@@ -110,7 +116,7 @@ class Node:
 
     def __init__(
         self,
-        handlers: Sequence[type[MessageHandler]],
+        handlers: Sequence[type[MessageHandler | ResponseRequiredMessageHandler]],
         in_: TextIO | None = None,
         out: TextIO | None = None,
         err: TextIO | None = None,
@@ -137,19 +143,24 @@ class Node:
     def run(self) -> None:
         for request in self.receive():
             try:
-                result = self.process(request)
-            except (TypeError, MessageHandlerMissingError) as exc:
+                response, response_type = self.process(request)
+            except (InvalidMessageError, MessageHandlerMissingError) as exc:
                 print(exc, file=self.err)
             else:
-                self.reply(request, result)
+                self.reply(request, response)
 
-    def reply(self, request: Message, result_payload: MessageBody) -> None:
-        reply_payload = dict(**result_payload)
+    # FIXME: the reply method is tightly coupled with
+    #        choose_request_handler method.
+    #        How can they communicate better?
+    #        Can a ResponseRequiredMessageHandler
+    #        form a reply? Do we simply reuse the logic with
+    #        inheritance?
+    def reply(self, request: Message, response: MessageBody) -> None:
+        reply_payload = dict(**response)
         handler = self.choose_request_handler(request)
         reply_payload["type"] = handler.reply_type
         reply_payload["msg_id"] = self.node_message_id
-        if "msg_id" in request.body:
-            reply_payload["in_reply_to"] = request.body["msg_id"]
+        reply_payload["in_reply_to"] = request.body["msg_id"]
         self.send(
             dest=request.src,
             payload=reply_payload,
@@ -197,10 +208,15 @@ class Node:
     def choose_request_handler(self, request: Message) -> MessageHandler:
         request_type = request.body.get("type")
         if not isinstance(request_type, str):
-            raise TypeError("type has to be a string")
+            raise InvalidMessageError("type has to be a string")
+        msg_id = request.body.get("msg_id")
+        if msg_id is not None and not isinstance(msg_id, int):
+            raise InvalidMessageError("msg_id must be int")
         handler = self.handlers.get(request_type)
         if handler is None:
             raise MessageHandlerMissingError("no handler for provided type")
+        if isinstance(handler, ResponseRequiredMessageHandler) and msg_id is None:
+            raise InvalidMessageError("no msg_id in a request that requires a response")
         return handler
 
 
