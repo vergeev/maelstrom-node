@@ -3,7 +3,7 @@ import pytest
 from typing import Sequence
 from main import (
     Node,
-    EchoMessageHandler,
+    EchoRequestHandler,
     MessageHandler,
     InitMessageHandler,
 )
@@ -103,7 +103,7 @@ from main import (
             '{"src": "c1", "dest": "n1", "body": {"msg_id": 1, "type": "echo", "echo": "hello there"}}\n',
             '{"src": "n1", "dest": "c1", "body": {"msg_id": 0, "type": "echo_ok", "echo": "hello there", "in_reply_to": 1}}\n',
             "",
-            [EchoMessageHandler],
+            [EchoRequestHandler],
             id="single_line_echo_handler_test",
         ),
         pytest.param(
@@ -112,7 +112,7 @@ from main import (
             '{"src": "n1", "dest": "c1", "body": {"msg_id": 0, "type": "echo_ok", "echo": "hello there", "in_reply_to": 2}}\n'
             '{"src": "n1", "dest": "c2", "body": {"msg_id": 1, "type": "echo_ok", "echo": "hello there", "in_reply_to": 3}}\n',
             "",
-            [EchoMessageHandler],
+            [EchoRequestHandler],
             id="two_line_echo_handler_test",
         ),
         pytest.param(
@@ -120,7 +120,7 @@ from main import (
             '{"src": "c1", "dest": "n1", "body": {"msg_id": 1, "type": "echo", "echo": "hello there"}}\n',
             '{"src": "n1", "dest": "c1", "body": {"msg_id": 0, "type": "echo_ok", "echo": "hello there", "in_reply_to": 1}}\n',
             "Expecting value: line 2 column 1 (char 1)\n",
-            [EchoMessageHandler],
+            [EchoRequestHandler],
             id="parsed_after_error_echo_handler_test",
         ),
         # InitMessageHandler tests
@@ -145,7 +145,7 @@ from main import (
             '{"src": "n1", "dest": "c0", "body": {"type": "init_ok", "msg_id": 0, "in_reply_to": 1}}\n'
             '{"src": "n1", "dest": "c1", "body": {"type": "echo_ok", "msg_id": 1, "echo": "hello", "in_reply_to": 2}}\n',
             "",
-            [InitMessageHandler, EchoMessageHandler],
+            [InitMessageHandler, EchoRequestHandler],
             id="init_ok_echo_ok",
         ),
     ],

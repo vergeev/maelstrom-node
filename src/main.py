@@ -1,18 +1,39 @@
-from typing import runtime_checkable
+import abc
+from typing import override
 import sys
 import json
 import dataclasses
 from json import JSONDecodeError
 from dataclasses import dataclass
-from typing import TextIO, Iterator, Mapping, Sequence, Protocol
+from typing import TextIO, Iterator, Mapping, Sequence
 
 
 type Json = Mapping[str, "Json"] | Sequence["Json"] | str | int | float | bool | None
+
+
 type MessageBody = Mapping[str, Json]
+
+
+def get_type(body: MessageBody) -> str:
+    request_type = body.get("type")
+    if isinstance(request_type, str):
+        return request_type
+    raise InvalidMessageError("type has to be a string")
+
+
+def get_msg_id(body: MessageBody) -> int:
+    msg_id = body.get("msg_id")
+    if isinstance(msg_id, int):
+        return msg_id
+    raise InvalidMessageError("msg_id must be int")
 
 
 class MessageHandlerMissingError(Exception):
     """No message handler for the provided type is registered"""
+
+    @override
+    def __str__(self) -> str:
+        return "no message handler is registered for the type passed"
 
 
 class InvalidMessageError(Exception):
@@ -41,8 +62,7 @@ class Message:
             raise InvalidMessageError("body has to be some type of mapping")
 
 
-@runtime_checkable
-class MessageHandler(Protocol):
+class RequestHandler:
     """Responsible for doing the work requested by the message.
 
     Returns a payload which contains "type" attribute
@@ -51,38 +71,60 @@ class MessageHandler(Protocol):
     """
 
     type: str
-
-    def __init__(self, node_delegate: Node) -> None:
-        """Initialize with a Node instance for interacting with the node state."""
-
-    def __call__(self, payload: MessageBody) -> MessageBody:
-        """Handle a message with body of type returned by self.get_type"""
-
-
-@runtime_checkable
-class ResponseRequiredMessageHandler(MessageHandler, Protocol):
     reply_type: str
 
+    def __init__(self, node: Node, request: MessageBody) -> None:
+        """Initialize the handler with the request.
 
-class EchoMessageHandler:
+        This is where the validation happens.
+
+        This is also when the response gets its unique id.
+
+        Initialization can throw InvalidMessageError.
+        If it doesn't, the rest of the class is going to have
+        the invariant "request has a correct schema".
+        """
+        request_type = get_type(request)
+        if request_type != self.type:
+            raise InvalidMessageError
+        self.node = node
+        self.request = request
+        self.response: dict[str, Json] = {
+            "type": self.reply_type,
+            "in_reply_to": get_msg_id(self.request),
+            "msg_id": self.node.node_message_id,
+        }
+
+
+    def __call__(self) -> MessageBody:
+        """Process a message body.
+
+        Never throws an error because nothing is ever
+        going wrong while processing a request.
+
+        Returns a message reply body.
+        """
+        return self.response
+
+
+class EchoRequestHandler(RequestHandler):
     type = "echo"
     reply_type = "echo_ok"
 
-    def __init__(self, node_delegate: Node) -> None:
-        self.node_delegate = node_delegate
-
-    def __call__(self, payload: MessageBody) -> MessageBody:
-        reply_payload = {}
-        for key, value in payload.items():
-            reply_payload[key] = value
-        return reply_payload
+    def __call__(self) -> MessageBody:
+        for key, value in self.request.items():
+            if key not in self.response:
+                self.response[key] = value
+        return super().__call__()
 
 
 class InitMessageHandler:
     type = "init"
     reply_type = "init_ok"
 
+    # TODO: cliffhanger -- rewrite in terms of the new abstract class
     def __init__(self, node_delegate: Node) -> None:
+        # TODO: validate init-specific schema
         self.node_delegate = node_delegate
 
     def __call__(self, payload: MessageBody) -> MessageBody:
@@ -116,7 +158,7 @@ class Node:
 
     def __init__(
         self,
-        handlers: Sequence[type[MessageHandler | ResponseRequiredMessageHandler]],
+        handlers: Sequence[type[RequestHandler]],
         in_: TextIO | None = None,
         out: TextIO | None = None,
         err: TextIO | None = None,
@@ -128,9 +170,9 @@ class Node:
         if err is None:
             err = sys.stderr
         self.in_, self.out, self.err = in_, out, err
-        self.handlers: Mapping[str, MessageHandler] = {}
+        self.handlers: Mapping[str, type[RequestHandler]] = {}
         for handler in handlers:
-            self.handlers[handler.type] = handler(node_delegate=self)
+            self.handlers[handler.type] = handler
         self.node_id = "n1"
         self.node_neighbor_ids = []
         self._node_message_id = -1
@@ -143,28 +185,21 @@ class Node:
     def run(self) -> None:
         for request in self.receive():
             try:
-                response, response_type = self.process(request)
-            except (InvalidMessageError, MessageHandlerMissingError) as exc:
-                print(exc, file=self.err)
-            else:
-                self.reply(request, response)
-
-    # FIXME: the reply method is tightly coupled with
-    #        choose_request_handler method.
-    #        How can they communicate better?
-    #        Can a ResponseRequiredMessageHandler
-    #        form a reply? Do we simply reuse the logic with
-    #        inheritance?
-    def reply(self, request: Message, response: MessageBody) -> None:
-        reply_payload = dict(**response)
-        handler = self.choose_request_handler(request)
-        reply_payload["type"] = handler.reply_type
-        reply_payload["msg_id"] = self.node_message_id
-        reply_payload["in_reply_to"] = request.body["msg_id"]
-        self.send(
-            dest=request.src,
-            payload=reply_payload,
-        )
+                handler = self.choose_request_handler(request)
+            except MessageHandlerMissingError as exc:
+                self.send_err(exc)
+                continue
+            try:
+                handle = handler(node, request.body)
+            except InvalidMessageError as exc:
+                self.send_err(exc)
+                continue
+            reply = handle()
+            if reply is not None:
+                self.send(
+                    dest=request.src,
+                    payload=reply,
+                )
 
     def send(self, dest: str, payload: MessageBody) -> None:
         message = Message(
@@ -173,6 +208,9 @@ class Node:
             body=payload,
         )
         print(json.dumps(dataclasses.asdict(message)), file=self.out)
+
+    def send_err(self, exc: Exception) -> None:
+        print(exc, file=self.err)
 
     def receive(self) -> Iterator[Message]:
         """Get new message.
@@ -205,21 +243,22 @@ class Node:
         handler = self.choose_request_handler(request)
         return handler(request.body)
 
-    def choose_request_handler(self, request: Message) -> MessageHandler:
-        request_type = request.body.get("type")
-        if not isinstance(request_type, str):
-            raise InvalidMessageError("type has to be a string")
-        msg_id = request.body.get("msg_id")
-        if msg_id is not None and not isinstance(msg_id, int):
-            raise InvalidMessageError("msg_id must be int")
+    def choose_request_handler(self, request: Message) -> type[RequestHandler]:
+        """Chooses a handler among the registered ones based of request body type.
+
+        Throws MessageHandlerMissingError in case the type is incorrect or there's
+        no handler registered for the type.
+        """
+        try:
+            request_type = get_type(request.body)
+        except InvalidMessageError as exc:
+            raise MessageHandlerMissingError from exc
         handler = self.handlers.get(request_type)
         if handler is None:
-            raise MessageHandlerMissingError("no handler for provided type")
-        if isinstance(handler, ResponseRequiredMessageHandler) and msg_id is None:
-            raise InvalidMessageError("no msg_id in a request that requires a response")
+            raise MessageHandlerMissingError
         return handler
 
 
 if __name__ == "__main__":
-    node = Node(handlers=[EchoMessageHandler, InitMessageHandler])
+    node = Node(handlers=[EchoRequestHandler, InitMessageHandler])
     node.run()
