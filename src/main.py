@@ -1,17 +1,20 @@
-import abc
-from typing import override
+from typing import override, TypeIs
 import sys
 import json
 import dataclasses
 from json import JSONDecodeError
-from dataclasses import dataclass
-from typing import TextIO, Iterator, Mapping, Sequence
+from dataclasses import dataclass, field
+from typing import TextIO, Iterator, Mapping, Sequence, Any
 
 
 type Json = Mapping[str, "Json"] | Sequence["Json"] | str | int | float | bool | None
 
 
 type MessageBody = Mapping[str, Json]
+
+
+def is_list_of[T](val: list[Any], target_type: type[T]) -> TypeIs[list[T]]:
+    return all(isinstance(x, target_type) for x in val)
 
 
 def get_type(body: MessageBody) -> str:
@@ -90,11 +93,10 @@ class RequestHandler:
         self.node = node
         self.request = request
         self.response: dict[str, Json] = {
+            "msg_id": self.node.node_message_id,
             "type": self.reply_type,
             "in_reply_to": get_msg_id(self.request),
-            "msg_id": self.node.node_message_id,
         }
-
 
     def __call__(self) -> MessageBody:
         """Process a message body.
@@ -118,29 +120,40 @@ class EchoRequestHandler(RequestHandler):
         return super().__call__()
 
 
-class InitMessageHandler:
+@dataclass
+class InitMessage:
+    raw_node_id: Json
+    raw_node_ids: Json
+    node_id: str = field(init=False)
+    node_ids: list[str] = field(init=False)
+
+    def __post_init__(self) -> None:
+        if isinstance(self.raw_node_id, str):
+            self.node_id = self.raw_node_id
+        else:
+            raise InvalidMessageError("node_id must be present and be a string")
+        if isinstance(self.raw_node_ids, list) and is_list_of(
+            self.raw_node_ids, target_type=str
+        ):
+            self.node_ids = self.raw_node_ids
+        else:
+            raise InvalidMessageError(
+                "node_ids must be present and be a list of strings"
+            )
+
+
+class InitMessageHandler(RequestHandler):
     type = "init"
     reply_type = "init_ok"
 
-    # TODO: cliffhanger -- rewrite in terms of the new abstract class
-    def __init__(self, node_delegate: Node) -> None:
-        # TODO: validate init-specific schema
-        self.node_delegate = node_delegate
-
-    def __call__(self, payload: MessageBody) -> MessageBody:
-        node_id = payload.get("node_id")
-        if isinstance(node_id, str):
-            self.node_delegate.node_id = node_id
-        else:
-            raise TypeError("node_id must be present and be a string")
-        node_ids = payload.get("node_ids")
-        if isinstance(node_ids, list):
-            # until we define input/output schema for MessageHandler,
-            # pyrefly: ignore [bad-assignment]
-            self.node_delegate.node_neighbor_ids = node_ids
-        else:
-            raise TypeError("node_ids must be present and be a list of strings")
-        return {}
+    def __call__(self) -> MessageBody:
+        message = InitMessage(
+            raw_node_id=self.request.get("node_id"),
+            raw_node_ids=self.request.get("node_ids"),
+        )
+        self.node.node_id = message.node_id
+        self.node.node_neighbor_ids = message.node_ids
+        return super().__call__()
 
 
 class Node:
@@ -185,21 +198,16 @@ class Node:
     def run(self) -> None:
         for request in self.receive():
             try:
-                handler = self.choose_request_handler(request)
-            except MessageHandlerMissingError as exc:
+                reply = self.process(request)
+            except (MessageHandlerMissingError, InvalidMessageError) as exc:
                 self.send_err(exc)
                 continue
-            try:
-                handle = handler(node, request.body)
-            except InvalidMessageError as exc:
-                self.send_err(exc)
-                continue
-            reply = handle()
-            if reply is not None:
-                self.send(
-                    dest=request.src,
-                    payload=reply,
-                )
+            else:
+                if reply is not None:
+                    self.send(
+                        dest=request.src,
+                        payload=reply,
+                    )
 
     def send(self, dest: str, payload: MessageBody) -> None:
         message = Message(
@@ -240,8 +248,9 @@ class Node:
         :raises: MessageHandlerMissingError when no handler is found
                  for the message body type is passed
         """
-        handler = self.choose_request_handler(request)
-        return handler(request.body)
+        handler_type = self.choose_request_handler(request)
+        handler = handler_type(node=self, request=request.body)
+        return handler()
 
     def choose_request_handler(self, request: Message) -> type[RequestHandler]:
         """Chooses a handler among the registered ones based of request body type.
