@@ -1,15 +1,12 @@
-# I primarily use it for ":make" from inside Vim
-all: mypy check format test
+all: ruff-format ruff-check mypy-check pyrefly-check test run
 
-mypy:
+mypy-check:
 	@uv run mypy . --no-error-summary
-# Does not really for vim quickfix list out-of-the-box,
-# so I do not include it in "all"
-pyrefly:
+pyrefly-check:
 	@uv run pyrefly check --output-format min-text --progress-bar no --summary=none
-check:
+ruff-check:
 	@uv run ruff check -q --output-format concise
-format:
+ruff-format:
 	@uv run ruff format -q --output-format concise
 run:
 	@uv run python -m src.main
