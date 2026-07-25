@@ -43,9 +43,6 @@ Here are some relevant links on typechecker comparison:
 * https://pyrefly.org/en/docs/pydantic/#comparison-to-existing-tools
 * https://pyrefly.org/en/docs/pyrefly-faq/
 
-I did not include pyrefly in `all` target of the Makefile because I use it for the `:make` command in Vim
-and the default Vim `errorformat` does not recognize pyrefly output.π
-
 ## Code Structure
 
 The two main classes are the `Node` and the `RequestHandler`.
